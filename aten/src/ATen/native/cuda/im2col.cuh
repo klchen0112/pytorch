@@ -49,8 +49,8 @@ __global__ void im2col_kernel(
     const dt* im = data_im + (channel_in * height + h_in) * width + w_in;
 
     for (int64_t i = 0; i < kernel_height; ++i) {
+      int64_t h = h_in + i * dilation_height;
       for (int64_t j = 0; j < kernel_width; ++j) {
-        int64_t h = h_in + i * dilation_height;
         int64_t w = w_in + j * dilation_width;
         *col = (h >= 0 && w >= 0 && h < height && w < width)
             ? im[i * dilation_height * width + j * dilation_width]
@@ -138,20 +138,21 @@ __forceinline__ __device__ void col2im_device(
 
   // TODO: use LCM of stride and dilation to avoid unnecessary loops
   for (int64_t h_col = h_col_start; h_col < h_col_end; h_col += 1) {
-    for (int64_t w_col = w_col_start; w_col < w_col_end; w_col += 1) {
-      int64_t h_k = (h_im - h_col * stride_height);
-      int64_t w_k = (w_im - w_col * stride_width);
-      if (h_k % dilation_height == 0 && w_k % dilation_width == 0) {
-        h_k /= dilation_height;
-        w_k /= dilation_width;
-        int64_t data_col_index =
-            (((c_im * kernel_h + h_k) * kernel_w + w_k) * height_col +
-              h_col) *
-                width_col +
-            w_col;
-        val += data_col[data_col_index];
+    int64_t h_k = (h_im - h_col * stride_height);
+    if (h_k % dilation_height != 0) continue;
+      for (int64_t w_col = w_col_start; w_col < w_col_end; w_col += 1) {
+        int64_t w_k = (w_im - w_col * stride_width);
+        if (w_k % dilation_width == 0) {
+          h_k /= dilation_height;
+          w_k /= dilation_width;
+          int64_t data_col_index =
+              (((c_im * kernel_h + h_k) * kernel_w + w_k) * height_col +
+               h_col) *
+                  width_col +
+              w_col;
+          val += data_col[data_col_index];
+        }
       }
-    }
   }
   data_im[index] = static_cast<dt>(val);
 }
